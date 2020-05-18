@@ -144,6 +144,9 @@ func (s *State) SetUpInterface(nodes []common.Node, routedNet *net.IPNet) error 
 		})
 		// via routes
 		for _, route := range node.Routes {
+			if !routedNet.Contains(route.IP) {
+				continue
+			}
 			routes = append(routes, netlink.Route{
 				LinkIndex: link.Attrs().Index,
 				Dst:       &route,
