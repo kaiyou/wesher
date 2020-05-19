@@ -1,0 +1,16 @@
+image: golang:1.13.9-alpine
+
+stages:
+  - build
+
+build:
+  stage: build
+  script:
+    - apk add --no-cache make
+    - make release GOARCHES="amd64 arm arm64"
+  only:
+    - branches
+  artifacts:
+    paths:
+      - wesher-*
+    expire_in: 8 weeks
