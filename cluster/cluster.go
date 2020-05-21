@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"net"
 	"os"
 	"time"
 
@@ -74,21 +75,46 @@ func (c *Cluster) Name() string {
 	return c.localNode.Name
 }
 
-// Join tries to join the cluster by contacting provided addresses
-// Provided addresses are passed as is, if no address is provided, known
-// cluster nodes are contacted instead.
-// Joining fail if none of the provided addresses or none of the known
-// nodes can be joined.
-func (c *Cluster) Join(addrs []string) error {
-	if len(addrs) == 0 {
-		for _, n := range c.state.Nodes {
-			addrs = append(addrs, n.Addr.String())
+// Join tries to join the cluster by contacting provided ips.
+// If no ip is provided, ips of known nodes are used instead.
+// Only addresses that are not already members are joined.
+func (c *Cluster) Join(hosts []string) error {
+	addrs := make([]net.IP, 0, len(hosts))
+
+	// resolve hostnames so we are able to proerly filter out
+	// cluster members later
+	for _, host := range hosts {
+		if addr := net.ParseIP(host); addr != nil {
+			addrs = append(addrs, addr)
+		} else if ips, err := net.LookupIP(host); err == nil {
+			addrs = append(addrs, ips...)
 		}
 	}
 
-	if _, err := c.ml.Join(addrs); err != nil {
+	// add known hosts if necessary
+	if len(addrs) == 0 {
+		for _, n := range c.state.Nodes {
+			addrs = append(addrs, n.Addr)
+		}
+	}
+
+	// filter out addresses that are already members
+	targets := make([]string, 0, len(addrs))
+	members := c.ml.Members()
+AddrLoop:
+	for _, addr := range addrs {
+		for _, member := range members {
+			if member.Addr.Equal(addr) {
+				continue AddrLoop
+			}
+		}
+		targets = append(targets, addr.String())
+	}
+
+	// finally try and join any remaining address
+	if _, err := c.ml.Join(targets); err != nil {
 		return err
-	} else if len(addrs) > 0 && c.ml.NumMembers() < 2 {
+	} else if len(targets) > 0 && c.ml.NumMembers() < 2 {
 		return errors.New("could not join to any of the provided addresses")
 	}
 	return nil
