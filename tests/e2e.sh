@@ -22,7 +22,7 @@ run_test_container() {
     shift
     local hostname=$1
     shift
-    docker run -d --cap-add=NET_ADMIN --name ${name} --hostname ${hostname} -v $(pwd):/app --network=wesher_test costela/wesher-test "$@"
+    docker run -d --cap-add=NET_ADMIN --name ${name} --hostname ${hostname} -v $(pwd):/app -v $(pwd)/tests/entrypoint.sh:/entrypoint.sh --network=wesher_test costela/wesher-test "$@"
     started_containers[$name]=$name
 }
 
@@ -139,6 +139,26 @@ test_routed_network() {
 
     stop_test_container test2-orig
     stop_test_container test1-orig    
+}
+
+test_rejoin() {
+    run_test_container test1-orig test1 --init
+    run_test_container test2-orig test2 --join test1-orig --rejoin 5
+
+    sleep 3
+
+    docker exec test1-orig bash -c "ip l s down eth0"
+    sleep 70
+
+    docker exec test2-orig grep test1 /etc/hosts && (docker logs test1-orig; docker logs test2-orig; false)
+    docker exec test1-orig bash -c "ip l s up eth0"
+
+    sleep 10
+
+    docker exec test1-orig ping -c1 -W1 test2 || (docker logs test1-orig; docker logs test2-orig; false)
+
+    stop_test_container test2-orig
+    stop_test_container test1-orig
 }
 
 for test_func in $(declare -F | grep -Eo '\<test_.*$'); do
