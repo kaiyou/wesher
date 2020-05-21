@@ -21,7 +21,7 @@ func Routes(filter *net.IPNet) <-chan []net.IPNet {
 			}
 			result := make([]net.IPNet, 0)
 			for _, route := range routes {
-				if route.Dst != nil && filter.Contains(route.Dst.IP) {
+				if route.Dst != nil && route.Gw == nil && filter.Contains(route.Dst.IP) {
 					result = append(result, *route.Dst)
 				}
 			}
