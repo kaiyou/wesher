@@ -50,6 +50,12 @@ func main() {
 		Logger: logrus.StandardLogger(),
 	}
 
+	// Prepare the rejoin timer
+	rejoin := make(<-chan time.Time)
+	if config.Rejoin > 0 {
+		rejoin = time.Tick(time.Duration(1000000000 * config.Rejoin))
+	}
+
 	// Join the cluster
 	cluster.Update(localNode)
 	nodec := cluster.Members() // avoid deadlocks by starting before join
@@ -96,6 +102,9 @@ func main() {
 			logrus.Info("announcing new routes...")
 			localNode.Routes = routes
 			cluster.Update(localNode)
+		case <-rejoin:
+			logrus.Debug("rejoining missing join nodes...")
+			cluster.Join(config.Join)
 		case <-incomingSigs:
 			logrus.Info("terminating...")
 			cluster.Leave()
